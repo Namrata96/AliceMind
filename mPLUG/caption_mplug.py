@@ -110,10 +110,10 @@ def evaluation(model, data_loader, tokenizer, device, config):
 
 
     answer_input = None
-    for n, (image, caption, object_labels, image_ids, gold_caption) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):        
-        image = image.to(device,non_blocking=True)             
-        caption = [each+config['eos'] for each in caption]
-        question_input = [config['bos']+" "+each for each in object_labels]
+    for n, input_dict in enumerate(metric_logger.log_every(data_loader, print_freq, header)):        
+        image = input_dict['image'].to(device,non_blocking=True)             
+        caption = [each+config['eos'] for each in input_dict['caption']]
+        question_input = [config['bos']+" "+each for each in input_dict['object_label']]
         caption = tokenizer(caption, padding='longest', truncation=True, max_length=args.max_input_length, return_tensors="pt").to(device)
         question_input = tokenizer(question_input, padding='longest', truncation=True, max_length=args.max_input_length, return_tensors="pt").to(device)
         topk_ids, topk_probs = model(image, question_input, caption, train=False)
@@ -123,41 +123,42 @@ def evaluation(model, data_loader, tokenizer, device, config):
             result.append({"question_id":image_id, "pred_caption":ans, "gold_caption":gold_caption_list})   
     return result
 
-@torch.no_grad()
-def evaluate(model, data_loader, dataset, tokenizer, device, config):
-    # test
-    model.eval()
+# NOT USED ANYWHERE
+# @torch.no_grad()
+# def evaluate(model, data_loader, dataset, tokenizer, device, config):
+#     # test
+#     model.eval()
 
-    metric_logger = utils.MetricLogger(delimiter="  ")
+#     metric_logger = utils.MetricLogger(delimiter="  ")
 
-    header = 'Evaluation:'
-    print_freq = 50
-    predicts = []
-    answers = []
-    answer_input = None
-    for n, (image, caption, image_ids, gold_caption) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):        
-        image = image.to(device,non_blocking=True)             
-        caption = [each+config['eos'] for each in caption]
-        question_input = [config['bos']]*len(caption)
-        caption = tokenizer(caption, padding='longest', truncation=True, max_length=args.max_input_length, return_tensors="pt").to(device)
-        question_input = tokenizer(question_input, padding='longest', truncation=True, max_length=args.max_input_length, return_tensors="pt").to(device)
+#     header = 'Evaluation:'
+#     print_freq = 50
+#     predicts = []
+#     answers = []
+#     answer_input = None
+#     for n, input_dict in enumerate(metric_logger.log_every(data_loader, print_freq, header)):        
+#         image = image.to(device,non_blocking=True)             
+#         caption = [each+config['eos'] for each in input_dict['caption']]
+#         question_input = [config['bos']]*len(caption)
+#         caption = tokenizer(caption, padding='longest', truncation=True, max_length=args.max_input_length, return_tensors="pt").to(device)
+#         question_input = tokenizer(question_input, padding='longest', truncation=True, max_length=args.max_input_length, return_tensors="pt").to(device)
 
-        for i in range(len(gold_caption)):
-            predicts.append(gold_caption[i][0])
-            answers.append(gold_caption[i])
-        #{'Bleu_1': 0.9999999999863945, 'Bleu_2': 0.9999999999859791, 'Bleu_3': 0.9999999999854866, 'Bleu_4': 0.999999999984889, 'METEOR': 1.0, 'ROUGE_L': 1.0, 'CIDEr': 2.7246232035629268, 'SPICE': 0.40389416048620613}
-        result = cal_metric(predicts, answers)
-        metric_logger.meters['Bleu_1'].update(result["Bleu_1"], n=image.size(0))
-        metric_logger.meters['Bleu_2'].update(result["Bleu_1"], n=image.size(0))
-        metric_logger.meters['Bleu_3'].update(result["Bleu_1"], n=image.size(0))
-        metric_logger.meters['Bleu_4'].update(result["Bleu_1"], n=image.size(0))
-        metric_logger.meters['Bleu_1'].update(result["Bleu_1"], n=image.size(0))
+#         for i in range(len(gold_caption)):
+#             predicts.append(gold_caption[i][0])
+#             answers.append(gold_caption[i])
+#         #{'Bleu_1': 0.9999999999863945, 'Bleu_2': 0.9999999999859791, 'Bleu_3': 0.9999999999854866, 'Bleu_4': 0.999999999984889, 'METEOR': 1.0, 'ROUGE_L': 1.0, 'CIDEr': 2.7246232035629268, 'SPICE': 0.40389416048620613}
+#         result = cal_metric(predicts, answers)
+#         metric_logger.meters['Bleu_1'].update(result["Bleu_1"], n=image.size(0))
+#         metric_logger.meters['Bleu_2'].update(result["Bleu_1"], n=image.size(0))
+#         metric_logger.meters['Bleu_3'].update(result["Bleu_1"], n=image.size(0))
+#         metric_logger.meters['Bleu_4'].update(result["Bleu_1"], n=image.size(0))
+#         metric_logger.meters['Bleu_1'].update(result["Bleu_1"], n=image.size(0))
 
-    # gather the stats from all processes
-    torch.cuda.empty_cache()
-    metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger.global_avg())
-    return {k: "{:.4f}".format(meter.global_avg) for k, meter in metric_logger.meters.items()}
+#     # gather the stats from all processes
+#     torch.cuda.empty_cache()
+#     metric_logger.synchronize_between_processes()
+#     print("Averaged stats:", metric_logger.global_avg())
+#     return {k: "{:.4f}".format(meter.global_avg) for k, meter in metric_logger.meters.items()}
 def cal_metric(result_file):
     result_list = json.load(open(result_file, "r"))
     predicts = []
@@ -188,7 +189,7 @@ def main(args, config):
 
     #### Dataset ####
     print("Creating vqa datasets")
-    datasets = create_dataset('coco', config)
+    datasets = create_dataset('sherlock', config)
 
     if args.distributed:
         num_tasks = utils.get_world_size()
@@ -197,10 +198,28 @@ def main(args, config):
     else:
         samplers = [None, None, None]
 
-    train_loader, val_loader, test_loader = create_loader(datasets,samplers,
-                                              batch_size=[config['batch_size_train'],config['batch_size_test'], config['batch_size_test']],
-                                              num_workers=[8,8,8],is_trains=[True, False, False], 
-                                              collate_fns=[coco_collate_fn, coco_collate_fn, coco_collate_fn]) 
+    with open(args.train) as f:
+        train = json.load(f)
+        train_loader = torch.utils.data.DataLoader(
+            sherlock(train, args, training=True),
+            batch_size=args.batch_size, num_workers=args.workers_dataloader, shuffle=True, worker_init_fn=worker_init_fn)
+
+    with open(args.val) as f:
+        val = json.load(f)
+        val_loader = torch.utils.data.DataLoader(
+            sherlock(val, args, training=False),
+            batch_size=args.batch_size, num_workers=args.workers_dataloader, shuffle=False, worker_init_fn=worker_init_fn)
+
+    with open(args.test) as f:
+        test = json.load(f)
+        test_loader = torch.utils.data.DataLoader(
+            sherlock(test, args, training=False),
+            batch_size=args.batch_size, num_workers=args.workers_dataloader, shuffle=False, worker_init_fn=worker_init_fn)
+
+    # train_loader, val_loader, test_loader = create_loader(datasets,samplers,
+    #                                           batch_size=[config['batch_size_train'],config['batch_size_test'], config['batch_size_test']],
+    #                                           num_workers=[8,8,8],is_trains=[True, False, False], 
+    #                                           collate_fns=[coco_collate_fn, coco_collate_fn, coco_collate_fn]) 
 
 
     tokenizer = BertTokenizer.from_pretrained(args.text_encoder)
@@ -263,8 +282,8 @@ def main(args, config):
 
     print("Start training")
     start_time = time.time()
-    vqa_result = evaluation(model, test_loader, tokenizer, device, config)
-    result_file = save_result(vqa_result, args.result_dir, 'vqa_result_epoch10')
+    captioning_result = evaluation(model, test_loader, tokenizer, device, config)
+    result_file = save_result(captioning_result, args.result_dir, 'captioning_result_epoch10')
     if utils.is_main_process():
         result = cal_metric(result_file)
     dist.barrier()
@@ -283,8 +302,8 @@ def main(args, config):
         if args.evaluate:
             break
 
-        vqa_result = evaluation(model, test_loader, tokenizer, device, config)
-        result_file = save_result(vqa_result, args.result_dir, 'vqa_result_epoch%d' % epoch)
+        captioning_result = evaluation(model, test_loader, tokenizer, device, config)
+        result_file = save_result(captioning_result, args.result_dir, 'captioning_result_epoch%d' % epoch)
         if utils.is_main_process():
             result = cal_metric(result_file)
             log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
@@ -303,8 +322,8 @@ def main(args, config):
 
         dist.barrier()
 
-    #vqa_result = evaluation(model, test_loader, tokenizer, device, config)
-    #result_file = save_result(vqa_result, args.result_dir, 'vqa_result_epoch%d' % epoch)
+    #captioning_result = evaluation(model, test_loader, tokenizer, device, config)
+    #result_file = save_result(captioning_result, args.result_dir, 'captioning_result_epoch%d' % epoch)
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -335,6 +354,22 @@ if __name__ == '__main__':
     parser.add_argument('--no_init_decocde', action='store_true')
     parser.add_argument('--do_accum', action='store_true')
     parser.add_argument('--accum_steps', default=4, type=int)
+    parser.add_argument(
+        '--vcr_dir',
+        default='images/',
+        help='directory with all of the VCR image data, contains, e.g., movieclips_Lethal_Weapon')
+
+    parser.add_argument(
+        '--vg_dir',
+        default='images/',
+        help='directory with visual genome data, contains VG_100K and VG_100K_2')
+
+    parser.add_argument('--widescreen_processing',
+                        type=int,
+                        help='if 1, then we will run CLIP twice over each image twice to get a bigger field of view, if 2 we will squarepad (less computation), if 0 we center crop (less computation)',
+                        default=1,
+                        choices=[0,1,2])
+
     args = parser.parse_args()
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)
@@ -351,7 +386,9 @@ if __name__ == '__main__':
     #config['schedular']['lr'] = args.lr
     config['text_encoder'] = args.text_encoder
     config['text_decoder'] = args.text_decoder
-
+    config['vcr_dir'] = args.vcr_dir
+    config['vg_dir'] = args.vg_dir
+    config['widescreen_processing'] = args.widescreen_processing
 
     yaml.dump(config, open(os.path.join(args.output_dir, 'config.yaml'), 'w'))
 
